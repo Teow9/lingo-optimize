@@ -1,0 +1,48 @@
+MODEL:
+! =====================================================================;
+! TEMPLATE: 0-1 mixed integer program (fixed-charge / selection pattern);
+! Solved by:  python lingo_runner.py integer_program.lng;
+! Pattern:    binary "indicator" variables Y gate continuous production;
+!             variables X via  X <= upperbound * Y  (Good Products model,;
+!             Hillier chap11). @BIN declares 0-1, @GIN general integer.;
+! =====================================================================;
+
+SETS:
+   PLANT:   OPEN, CAP;
+   PRODUCT: PROFIT, SALES, Y;
+   COMBO( PLANT, PRODUCT): X, HOURS;
+ENDSETS
+
+DATA:
+   MAXPLNT = 1;              ! at most this many plants may be opened;
+   MAXPRD  = 2;              ! at most this many products may be offered;
+   PLANT   = PLANT1 PLANT2;
+   CAP     = 30 40;          ! capacity of each plant;
+   PRODUCT = PROD1 PROD2 PROD3;
+   PROFIT  = 5 7 3;          ! profit per unit;
+   SALES   = 7 5 9;          ! max sales of each product;
+   HOURS   = 3 4 2
+             4 6 2;          ! hours per unit, by plant x product;
+ENDDATA
+
+! Maximize total profit;
+ [OBJ] MAX = @SUM( COMBO( I, J): PROFIT( J) * X( I, J));
+
+! Can only produce product J if it is "on": indicator gating;
+ @FOR( COMBO( I, J):
+    X( I, J) <= SALES( J) * Y( J));
+
+! Offer at most MAXPRD products;
+ @SUM( PRODUCT( J): Y( J)) <= MAXPRD;
+
+! Plant capacity + open/close decision;
+ @FOR( PLANT( I):
+    [PLANTCAP] @SUM( PRODUCT( J): HOURS( I, J) * X( I, J)) <= CAP( I) * OPEN( I);
+    @BIN( OPEN( I)));
+
+@FOR( PRODUCT( J): @BIN( Y( J)));
+
+! Limit the number of plants opened;
+ @SUM( PLANT( I): OPEN( I)) <= MAXPLNT;
+
+END

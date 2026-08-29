@@ -1,0 +1,38 @@
+MODEL:
+! =====================================================================;
+! TEMPLATE: transportation problem (LP) with SETS/DATA;
+! Solved by:  python lingo_runner.py transport_sets.lng;
+! Structure:  two primitive sets + one dense derived set (the classic;
+!             LINGO modeling pattern for any "flow/matrix" problem);
+! Replace the DATA below with your problem data (see data_bridge.md;
+!             for passing data from Python without editing the model);
+! =====================================================================;
+
+SETS:
+   WAREHOUSE: CAPACITY;
+   CUSTOMER: DEMAND;
+   ROUTES( WAREHOUSE, CUSTOMER): COST, VOLUME;
+ENDSETS
+
+DATA:
+   WAREHOUSE = WH1 WH2 WH3;
+   CUSTOMER  = C1 C2 C3 C4;
+   CAPACITY  = 30 25 21;
+   DEMAND    = 15 17 22 12;
+   COST      =  6  2  6  7
+                4  9  5  3
+                8  8  1  5;
+ENDDATA
+
+! Objective: total transport cost;
+ [OBJ] MIN = @SUM( ROUTES( I, J): COST( I, J) * VOLUME( I, J));
+
+! Each customer's demand must be met;
+ @FOR( CUSTOMER( J): [DEM]
+    @SUM( WAREHOUSE( I): VOLUME( I, J)) >= DEMAND( J));
+
+! No warehouse ships more than its capacity;
+ @FOR( WAREHOUSE( I): [SUP]
+    @SUM( CUSTOMER( J): VOLUME( I, J)) <= CAPACITY( I));
+
+END

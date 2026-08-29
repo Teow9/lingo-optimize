@@ -1,0 +1,46 @@
+MODEL:
+! =====================================================================;
+! TEMPLATE - @POINTER data bridge (Python passes data in/out via memory);
+! Solved by -  python lingo_runner.py pointer_bridge.lng --inputs ptr.json;
+! ptr.json slot numbers MUST be consecutive 1..N in registration order --;
+!   {"inputs":  {"1": "MON TUE WED THU FRI SAT SUN",};
+!   {"2": [17, 13, 15, 19, 14, 16, 11]},;
+!   {"outputs": {"3": 7, "4": 7, "5": 1, "6": 1}};
+! Set member names may be space- or newline-separated -- the runner;
+!   converts spaces to the official newline protocol automatically.;
+! Results come back in stdout JSON pointer_outputs and summary CSVs.;
+! Model: staff scheduling (STAFFPTR2 pattern) - how many people start;
+!        each day, working 5 consecutive days, to cover daily needs;
+! =====================================================================;
+
+SETS:
+    DAYS: NEEDS, START, ONDUTY;
+ ENDSETS
+
+ DATA:
+    DAYS  = @POINTER( 1);      ! IN : set member names (one space-separated string);
+    NEEDS = @POINTER( 2);      ! IN : required staff per day (array, len = |DAYS|);
+ ENDDATA
+
+ [OBJECTIVE] MIN = @SUM( DAYS( I): START( I));
+
+ @FOR( DAYS( TODAY):
+  ! Number on duty today = people who started in the last 5 days;
+    ONDUTY( TODAY) =
+     @SUM( DAYS( D)| D #LE# 5:
+      START( @WRAP( TODAY - D + 1, @SIZE( DAYS))));
+
+  ! Cover the staffing requirement;
+    ONDUTY( TODAY) >= NEEDS( TODAY);
+
+    @GIN( START);              ! integer number of starters;
+ );
+
+ DATA:
+    @POINTER( 3) = START;      ! OUT: starters per day (array, len 7);
+    @POINTER( 4) = ONDUTY;     ! OUT: on-duty per day   (array, len 7);
+    @POINTER( 5) = OBJECTIVE;  ! OUT: total staff hired (scalar);
+    @POINTER( 6) = @STATUS();  ! OUT: solver status code (scalar);
+ ENDDATA
+
+END
