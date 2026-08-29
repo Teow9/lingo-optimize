@@ -1,0 +1,15 @@
+: GO
+  Compiling model ...
+  Structural analysis, pass 1 ...
+  Solving ...
+ 
+  Global optimal solution found.
+  Objective value:                              7.00000
+  Infeasibilities:                              3.500000
+  Total solver iterations:                            12
+ 
+  Model Class:                                        LP
+ 
+  Total variables:                     4
+ 
+  Total constraints:                    2

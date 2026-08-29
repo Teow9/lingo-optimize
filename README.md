@@ -28,7 +28,7 @@ LLM 写 LINGO 模型的最大痛点是语法错乱、反复返工 —— LINGO �
 会产出无法求解的代码。本技能把"防幻觉"知识直接内置进技能包：
 
 - `references/lingo_syntax.md` —— 从官方样例与 985 页用户手册提炼的语法规范 +
-  11 条高频错误自查清单（写模型前必读）；
+  14 条高频错误自查清单（写模型前必读）；
 - `assets/templates/` —— 3 个已实测求出正确最优解、可直接改写的模板；
 - `references/model_library.md` —— 本机 120+ 官方样例模型按题型索引；
 - `scripts/lingo_runner.py` —— 零编译 ctypes 调用，子进程硬超时防挂死。
@@ -87,7 +87,8 @@ python lingo-optimize/scripts/lingo_runner.py model.lng \
 - 默认输出目录 `./lingo_runs/run_<时间戳>/`（相对当前工作目录）；
 - stdout 输出一个 JSON：求解状态、目标值、gap、迭代次数、`@POINTER` 回传值、
   warnings、各 CSV 路径；
-- 退出码：0 = 求得最优（全局/局部）；1 = 不可行/无界/未定；2 = 调用或系统错误；
+- 退出码：0 = 求得最优（全局/局部）；1 = 不可行/无界/未定/未求解（NOT
+  SOLVED，含语法错、Error 62 等）；2 = 调用或系统错误；
 - 求解在带 300s 硬超时的子进程中运行，模型有问题时杀进程报错，不会挂死终端。
 
 ### 方式三：作为 Python 库
@@ -100,10 +101,11 @@ result = solve("model.lng", out_dir="run1")   # 返回 dict，字段同 stdout J
 ## 目录结构
 
 ```
-SKILL.md                  # 技能入口：触发条件 + 标准工作流 + 8 条硬规则 + 排错速查
+SKILL.md                  # 技能入口：触发条件 + 标准工作流 + 9 条硬规则 + 排错速查
 scripts/lingo_runner.py   # ctypes -> Lingd64_18.dll，CSV 导出，子进程超时兜底
+scripts/self_test.py      # 离线回归自测（fixtures 取自真实运行日志，免 LINGO）
 references/
-  lingo_syntax.md         # 语法规范 + 11 条高频错误（防幻觉核心，写模型前必读）
+  lingo_syntax.md         # 语法规范 + 14 条高频错误（防幻觉核心，写模型前必读）
   functions.md            # 127 个内置 @ 函数及官方描述
   data_bridge.md          # Python <-> LINGO 数据通道：内插 DATA / @POINTER / @TEXT-@FILE
   model_library.md        # 本机 120+ 官方样例模型按题型索引
@@ -141,3 +143,15 @@ assets/templates/         # 实测模板：运输 LP、0-1 MIP、@POINTER 数据
 - 已在 LINGO 18.0.44 上测试（DLL API `Lingd64_18`，LINDO API 12.0）；更换
   LINGO 版本后如 DLL 加载失败，核对 `Programming Samples\Lingd18.h` 中 9 个
   `LS*Lng` 导出函数签名（runner 的绑定即依据该头文件）。
+- 模型体量限制（实测）：单行 >约 800 字符触发 LINGO Error 3（该行数据被
+  截断）；内联 DATA >约 1 MB 触发 Error 62（模型未进入求解，状态 NOT
+  SOLVED）——大数据走 `@TEXT`/`@POINTER` 外置。
+
+## 版本
+
+- **v1.1（2026-08-29）**：① 状态判定重写——`status_text` 只锚定日志报告段
+  （"No feasible solution found." / 非零 `Infeasibilities` → 不可行；无报告段 →
+  NOT SOLVED），不再对整份日志做关键词扫描；② 新增求解前 advisory lint
+  （超长行 / 内联 DATA 体量 / 变量域缺失，进 stdout JSON `warnings`）；
+  ③ 语法文档补三条实测规则（清单 11→14 条）+ 新增 `scripts/self_test.py`。
+  改动依据与踩坑细节见项目实测报告；v1.0 原件见对应工作区备份目录。

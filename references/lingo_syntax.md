@@ -55,6 +55,9 @@ END
 - 变量默认非负（≥0）。允许负值必须显式 `@FREE(x);`。
 - 行长度与字符：纯 ASCII 最稳；模型文件建议 UTF-8 无 BOM 或 ANSI。
   **中文只能出现在注释里**，不要用于集合成员名、变量名。
+- **单行长度上限（实测）**：任何一行超过约 **800 字符**会触发 Error 3
+  "Overlength line"，且该行数据被截断——矩阵数据务必按每行 ≤500 字符分块
+  折行（Python 生成模式见第 4.1 节）。
 
 ## 3. SETS 段：集合与属性
 
@@ -108,6 +111,35 @@ ENDDATA
 - 数据也可以来自文件/Excel/ODBC：`@TEXT('data.txt')`、`@OLE('b.xlsx')`、
   `@ODBC(...)`、`@POINTER(n)`——见 `data_bridge.md`。
 
+### 4.1 超长矩阵数据的分块书写（实测必用）
+
+单行超过约 800 字符触发 Error 3 "Overlength line" 且数据被截断。Python 生成
+`.lng` 时按字符数折行：
+
+```python
+def fmt_data(vals, per_line=500):
+    """把展平的矩阵数据折成多行，每行不超过 per_line 个字符。"""
+    lines, cur = [], ""
+    for v in vals:
+        s = " %.10g" % v
+        if len(cur) + len(s) > per_line:
+            lines.append(cur)
+            cur = ""
+        cur += s
+    if cur:
+        lines.append(cur)
+    return "\n".join(lines)
+
+# DATA:
+#  S = <fmt_data(flat_matrix)>;
+# ENDDATA
+```
+
+另注意内联数据**总量**：MB 级（实测 1.3 MB）会触发 Error 62
+"Ran out of workspace in model generation"——模型根本没进入求解，runner 状态为
+NOT SOLVED。此时把数据外置（`@TEXT`/`@POINTER`，见 `data_bridge.md`）或缩减规模；
+判断"模型没跑"看 `lingo_run.log` 末尾的 `[Error Code: N]` 行。
+
 ## 5. 目标与约束
 
 ```lingo
@@ -145,6 +177,13 @@ ENDDATA
  @BND( 5, X, 20);     ! 下界 5 ≤ X ≤ 20（比约束更高效，优先用）;
  @SEMIC( 1, X, 10);   ! X=0 或 1≤X≤10;
 ```
+
+**防御性 @BND（实测规则）**：凡作 0-1 松展或有界语义使用的集合属性，用
+`@BND( 0, X, 1)` 把**上下界都写全**，不要依赖"默认非负 + 条件门控约束"。
+实测踩坑：某下界模型给变量 Z 写了 `@BND(0, Z, 1)`，却漏掉同为 0-1 语义的
+SB/SE，只靠 `@FOR` 条件约束门控——松展模型因此留有语义漏洞。`lingo_runner.py`
+（v1.1 起）会在求解前对"已声明部分变量域、但仍有属性缺域"的模型给出
+advisory 提示。
 
 ## 6. 高频正确模式（照抄结构即可）
 
@@ -195,6 +234,14 @@ ENDDATA
 11. **行标签与已有名字重名**（Error 37 "Name already in use"）：`[CAP]` 这类
     标签与集合/属性/变量共享命名空间——若集合里已有属性 `CAP`，行标签必须
     换名（如 `[PLANTCAP]`）。
+12. **DATA/约束单行超长（>约 800 字符）**：Error 3 "Overlength line"，超长行
+    数据被截断——按每行 ≤500 字符分块折行（模式见第 4.1 节）。
+13. **内联 DATA 总量过大（MB 级，实测 1.3 MB）**：Error 62 "Ran out of
+    workspace in model generation"，模型未进入求解（runner 状态 NOT SOLVED），
+    并非不可行——数据外置（@TEXT/@POINTER）或缩减规模，读 `lingo_run.log`
+    末尾的 Error 行确认。
+14. **0-1/有界语义漏写 @BND**：只依赖"默认非负 + 条件门控约束"会留语义
+    漏洞——显式 `@BND( 0, X, 1)` 双界写全（见第 5.1 节防御性 @BND）。
 
 ## 8. 完整模板（三个）
 

@@ -1,0 +1,226 @@
+  LINGO/WIN64 18.0.0.44 (25 Mar 2019)
+ 
+  LINDO API 12.0.3977.143 (Mar 14 2019 06:00:17)
+ 
+  Copyright (C) 2011-2018 LINDO Systems Inc. Licensed material,
+  all rights reserved. Copying except as authorized in license
+  agreement is prohibited.
+ 
+  License location: E:\Tools\LINGO64_18\lndlng18.lic
+ 
+  Fenerbahce            
+ 
+  Licensed for commercial use.
+  Branch-and-bound solver enabled.
+  Nonlinear solver enabled.
+  Barrier solver enabled.
+  Global solver enabled.
+  Integer solver enabled.
+  Stochastic solver enabled.
+  Conic solver enabled.
+ 
+ 
+   Parameter        Old Value     New Value
+    ECHOIN             0             1
+ 
+: SET TERSEO 0
+ 
+   Parameter        Old Value     New Value
+    TERSEO             0             0
+ 
+: SET DUALCO 1
+ 
+   Parameter        Old Value     New Value
+    DUALCO             1             1
+ 
+: TAKE E:/Test/question2/lingo_runs/q3_infeas_n33/q3_feas.lng
+: MODEL:
+? ! Q3 feasibility: 33 N-S survey lines, x_i east-positive (m);
+? ! D(x)=110-T*x, eE=SF*D/(CF+T*SF), eW=SF*D/(CF-T*SF), W=eE+eW;
+? SETS:
+?  LN /1..33/: X;
+? ENDSETS
+? DATA:
+?  C1 = 0.52267727; C2 = 0.47732273; SF = 0.86602540; T = 0.02618595;
+? ENDDATA
+?  [WB] X(1) - SF*(110 - T*X(1))/C2 <= -3704;
+?  @FOR( LN( I) | I #GT# 1:
+?     [ORD] X( I) - X( I - 1) >= 1;
+?     [OVLO] X( I - 1) + SF*(110 - T*X( I - 1))/C1 - X( I) + SF*(110 - T*X( I))/C2 -
+?     [OVHI] X( I - 1) + SF*(110 - T*X( I - 1))/C1 - X( I) + SF*(110 - T*X( I))/C2 -
+?  [EB] X(33) + SF*(110 - T*X(33))/C1 >= 3704;
+?  @FOR( LN: @BND( -3704, X, 3704));
+?  [OBJ] MIN = X(1);
+? END
+: GO
+  Compiling model ...
+  Structural analysis, pass 1 ...
+  Scalarizing model ...
+  Generating nonzero matrix ...
+  Solving ...
+ 
+ 
+ [Error Code:   81]
+ 
+  No feasible solution found.
+ 
+  No feasible solution found.
+  Infeasibilities:                              25.75939
+  Total solver iterations:                           136
+  Elapsed runtime seconds:                          0.00
+ 
+  Model Class:                                        LP
+ 
+  Total variables:                     33
+  Nonlinear variables:                  0
+  Integer variables:                    0
+ 
+  Total constraints:                   99
+  Nonlinear constraints:                0
+ 
+  Total nonzeros:                     195
+  Nonlinear nonzeros:                   0
+ 
+ 
+ 
+                                Variable           Value        Reduced Cost
+                                      C1       0.5226773            0.000000
+                                      C2       0.4773227            0.000000
+                                      SF       0.8660254            0.000000
+                                       T       0.2618595E-01        0.000000
+                                   X( 1)       -3345.478            0.000000
+                                   X( 2)       -2750.979            0.000000
+                                   X( 3)       -2203.316            0.000000
+                                   X( 4)       -1698.798            0.000000
+                                   X( 5)       -1234.026            0.000000
+                                   X( 6)       -805.8701            0.000000
+                                   X( 7)       -411.4445            0.000000
+                                   X( 8)       -48.09221            0.000000
+                                   X( 9)        286.6347            0.000000
+                                  X( 10)        594.9915            0.000000
+                                  X( 11)        879.0555            0.000000
+                                  X( 12)        1140.741            0.000000
+                                  X( 13)        1381.810            0.000000
+                                  X( 14)        1603.887            0.000000
+                                  X( 15)        1808.470            0.000000
+                                  X( 16)        1996.934            0.000000
+                                  X( 17)        2170.552            0.000000
+                                  X( 18)        2330.491            0.000000
+                                  X( 19)        2477.831            0.000000
+                                  X( 20)        2613.562            0.000000
+                                  X( 21)        2738.601            0.000000
+                                  X( 22)        2853.789            0.000000
+                                  X( 23)        2959.902            0.000000
+                                  X( 24)        3057.656            0.000000
+                                  X( 25)        3147.708            0.000000
+                                  X( 26)        3230.666            0.000000
+                                  X( 27)        3307.089            0.000000
+                                  X( 28)        3377.490            0.000000
+                                  X( 29)        3442.346            0.000000
+                                  X( 30)        3502.092            0.000000
+                                  X( 31)        3557.131            0.000000
+                                  X( 32)        3607.834            0.000000
+                                  X( 33)        3654.543            0.000000
+ 
+                                     Row    Slack or Surplus      Dual Price
+                                      WB        0.000000            132194.7
+                                 ORD( 2)        593.4989            0.000000
+                                OVLO( 2)        0.000000           -144757.0
+                                OVHI( 2)        63.18945            0.000000
+                                 ORD( 3)        546.6636            0.000000
+                                OVLO( 3)        0.000000           -157136.4
+                                OVHI( 3)        58.21131            0.000000
+                                 ORD( 4)        503.5180            0.000000
+                                OVLO( 4)        0.000000           -170574.4
+                                OVHI( 4)        53.62536            0.000000
+                                 ORD( 5)        463.7715            0.000000
+                                OVLO( 5)        0.000000           -185161.7
+                                OVHI( 5)        49.40069            0.000000
+                                 ORD( 6)        427.1562            0.000000
+                                OVLO( 6)        0.000000           -200996.4
+                                OVHI( 6)        45.50884            0.000000
+                                 ORD( 7)        393.4256            0.000000
+                                OVLO( 7)        0.000000           -218185.3
+                                OVHI( 7)        41.92360            0.000000
+                                 ORD( 8)        362.3523            0.000000
+                                OVLO( 8)        0.000000           -236844.2
+                                OVHI( 8)        38.62081            0.000000
+                                 ORD( 9)        333.7269            0.000000
+                                OVLO( 9)        0.000000           -257098.7
+                                OVHI( 9)        35.57822            0.000000
+                                ORD( 10)        307.3568            0.000000
+                               OVLO( 10)        0.000000           -279085.4
+                               OVHI( 10)        32.77532            0.000000
+                                ORD( 11)        283.0640            0.000000
+                               OVLO( 11)        0.000000           -302952.4
+                               OVHI( 11)        30.19324            0.000000
+                                ORD( 12)        260.6851            0.000000
+                               OVLO( 12)        0.000000           -328860.4
+                               OVHI( 12)        27.81458            0.000000
+                                ORD( 13)        240.0693            0.000000
+                               OVLO( 13)        0.000000           -356984.0
+                               OVHI( 13)        25.62332            0.000000
+                                ORD( 14)        221.0776            0.000000
+                               OVLO( 14)        0.000000           -387512.7
+                               OVHI( 14)        23.60468            0.000000
+                                ORD( 15)        203.5820            0.000000
+                               OVLO( 15)        0.000000           -420652.2
+                               OVHI( 15)        21.74508            0.000000
+                                ORD( 16)        187.4648            0.000000
+                               OVLO( 16)        0.000000           -456625.7
+                               OVHI( 16)        20.03197            0.000000
+                                ORD( 17)        172.6173            0.000000
+                               OVLO( 17)        0.000000           -495675.6
+                               OVHI( 17)        18.45383            0.000000
+                                ORD( 18)        158.9395            0.000000
+                               OVLO( 18)        0.000000           -538065.0
+                               OVHI( 18)        17.00002            0.000000
+                                ORD( 19)        146.3393            0.000000
+                               OVLO( 19)        0.000000           -584079.5
+                               OVHI( 19)        15.66074            0.000000
+                                ORD( 20)        134.7318            0.000000
+                               OVLO( 20)        0.000000           -634029.1
+                               OVHI( 20)        14.42696            0.000000
+                                ORD( 21)        124.0386            0.000000
+                               OVLO( 21)        0.000000           -688250.2
+                               OVHI( 21)        13.29039            0.000000
+                                ORD( 22)        114.1879            0.000000
+                               OVLO( 22)        0.000000           -747108.3
+                               OVHI( 22)        12.24336            0.000000
+                                ORD( 23)        105.1133            0.000000
+                               OVLO( 23)        0.000000           -810999.9
+                               OVHI( 23)        11.27881            0.000000
+                                ORD( 24)        96.75357            0.000000
+                               OVLO( 24)        0.000000           -880355.3
+                               OVHI( 24)        10.39025            0.000000
+                                ORD( 25)        89.05243            0.000000
+                               OVLO( 25)        0.000000           -955641.9
+                               OVHI( 25)        9.571697            0.000000
+                                ORD( 26)        81.95799            0.000000
+                               OVLO( 26)        0.000000           -1037367.
+                               OVHI( 26)        8.817627            0.000000
+                                ORD( 27)        75.42246            0.000000
+                               OVLO( 27)        0.000000           -1126081.
+                               OVHI( 27)        8.122964            0.000000
+                                ORD( 28)        69.40181            0.000000
+                               OVLO( 28)        0.000000           -1222382.
+                               OVHI( 28)        7.483028            0.000000
+                                ORD( 29)        63.85547            0.000000
+                               OVLO( 29)        0.000000           -1326918.
+                               OVHI( 29)        6.893506            0.000000
+                                ORD( 30)        58.74608            0.000000
+                               OVLO( 30)        0.000000           -1440394.
+                               OVHI( 30)        6.350427            0.000000
+                                ORD( 31)        54.03921            0.000000
+                               OVLO( 31)        0.000000           -1563574.
+                               OVHI( 31)        5.850133            0.000000
+                                ORD( 32)        49.70316            0.000000
+                               OVLO( 32)        0.000000           -1697288.
+                               OVHI( 32)        5.389253            0.000000
+                                ORD( 33)        45.70870            0.000000
+                               OVLO( 33)        0.000000           -1842438.
+                               OVHI( 33)        4.964681            0.000000
+                                      EB       -25.75939           -2000000.
+                                     OBJ        51.51878           -1.000000
+ 
+: QUIT

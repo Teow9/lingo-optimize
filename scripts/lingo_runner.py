@@ -19,8 +19,9 @@ pointers.json format (slot numbers must be consecutive 1..N in the model):
   {"inputs":  {"1": "MON TUE WED", "2": [8, 10, 9], "3": 0.03},
    "outputs": {"7": 7, "8": 7, "9": 1}}     # outputs: slot -> expected length
 
-Exit codes: 0 = optimal (global/local); 1 = infeasible/unbounded/undetermined;
-            2 = call/system error or model failed to run.
+Exit codes: 0 = optimal (global/local); 1 = infeasible/unbounded/undetermined/
+            NOT SOLVED (no solution report — syntax/data error, LINGO error 62,
+            ...); 2 = call/system error.
 """
 import argparse
 import csv
@@ -257,23 +258,87 @@ class TraceCollector:
 # --------------------------------------------------------------------------
 # Log parsing
 # --------------------------------------------------------------------------
-STATUS_PATTERNS = [
-    (STATUS_GLOBAL, re.compile(r"global optimal", re.I)),
-    (STATUS_LOCAL, re.compile(r"local optimal", re.I)),
-    (STATUS_INFEASIBLE, re.compile(r"infeasible", re.I)),
-    (STATUS_UNBOUNDED, re.compile(r"unbounded", re.I)),
-    (STATUS_UNDETERMINED, re.compile(r"undetermined", re.I)),
-    (STATUS_FEASIBLE, re.compile(r"feasible solution", re.I)),
-]
+# Report-section anchors, verified against real LINGO 18 logs (2023 CUMCM B):
+#   optimal LP -> "Global optimal solution found." + "Infeasibilities: 0.000000"
+#   infeasible -> "[Error Code: 81] No feasible solution found." (printed twice)
+#                 + "Infeasibilities: 25.75939" + an [Error Code: 92] warning;
+#                 the word INFEASIBLE never appears as a status line
+#   failed run -> e.g. Error 62 "Ran out of workspace": no report lines at all
+SOLUTION_FOUND_RE = re.compile(
+    r"(?:Global|Local) optimal solution found\.|No feasible solution found\.", re.I)
+REPORT_STAT_RE = re.compile(
+    r"Objective value:|Objective bound:|Infeasibilities:|Total solver iterations:",
+    re.I)
+INFEAS_TOL = 1e-6  # LINGO may print tolerance-level residuals as nonzero
 
 
-def detect_status(log_text):
-    """Map solver report phrases to a @STATUS() code."""
-    # search only after the last GO (the report section): use the tail
-    for code, pat in STATUS_PATTERNS:
-        if pat.search(log_text):
-            return code
-    return None
+def find_report_tail(log_text):
+    """Return the solution-report region (from its first line to EOF), or None
+    when the log has no report section at all. The model echo above the report
+    can contain arbitrary text (paths, comments) and must never take part in
+    status detection, so everything before the solver report is sliced off."""
+    scope = log_text
+    last_solve = None
+    for m in re.finditer(r"^\s*Solving \.\.\.", log_text, re.M):
+        last_solve = m
+    if last_solve is not None:
+        scope = log_text[last_solve.end():]
+    m = SOLUTION_FOUND_RE.search(scope) or REPORT_STAT_RE.search(scope)
+    if m is None:
+        if last_solve is not None:
+            return None  # solver ran but produced no report -> nothing was solved
+        # unknown log shape (no "Solving ..." marker, e.g. other TERSEO setups):
+        # best-effort scan of the whole log rather than a blind NOT SOLVED
+        m = SOLUTION_FOUND_RE.search(log_text) or REPORT_STAT_RE.search(log_text)
+        if m is None:
+            return None
+        scope = log_text
+    return scope[m.start():]
+
+
+def detect_status(log_text, region=None):
+    """Map the solution-report region of a LINGO log to a @STATUS() code.
+
+    Returns (status_code_or_None, warnings). The decision is value-based and
+    confined to the report region: the model echo and mid-solve warnings
+    ("may be nonoptimal/infeasible") never decide the status. "No feasible
+    solution found." is tested before the generic 'feasible solution' pattern,
+    which would otherwise match that very phrase and report a non-proven-
+    optimal status for an infeasible run.
+    """
+    if region is None:
+        region = find_report_tail(log_text)
+    if region is None:
+        return None, []
+    warns = []
+    m_inf = re.search(r"Infeasibilities:\s*(" + NUM_RE + r")", region, re.I)
+    infeas = float(m_inf.group(1)) if m_inf else None
+    no_feas = re.search(r"No feasible solution found", region, re.I)
+    m_found = re.search(r"(Global|Local) optimal solution found", region, re.I)
+
+    if no_feas:
+        if m_found:
+            warns.append("report contains both '%s optimal solution found' and "
+                         "'No feasible solution found' - verify manually"
+                         % m_found.group(1))
+        return STATUS_INFEASIBLE, warns
+    if m_found:
+        if infeas is not None and infeas > INFEAS_TOL:
+            warns.append("report says '%s optimal solution found' but "
+                         "Infeasibilities=%s - verify manually"
+                         % (m_found.group(1), infeas))
+        return (STATUS_GLOBAL if m_found.group(1).lower() == "global"
+                else STATUS_LOCAL), warns
+    if infeas is not None and infeas > INFEAS_TOL:
+        return STATUS_INFEASIBLE, warns
+    # best-effort: statuses whose exact LINGO 18 wording was not observed in
+    # real logs; matched inside the report region only
+    for code, pat in ((STATUS_UNBOUNDED, re.compile(r"\bunbounded\b", re.I)),
+                      (STATUS_UNDETERMINED, re.compile(r"\bundetermined\b", re.I)),
+                      (STATUS_FEASIBLE, re.compile(r"feasible solution", re.I))):
+        if pat.search(region):
+            return code, warns
+    return None, warns
 
 
 ERROR_LINE = re.compile(r"\[\s*Error Code:\s*(\d+)\s*\]\s*(.*)")
@@ -380,6 +445,97 @@ def fmt(x):
 
 
 # --------------------------------------------------------------------------
+# Pre-solve lint (advisory only, never blocks the solve). Rules derived from
+# real incidents; see references/lingo_syntax.md section 7, items 12-14.
+# --------------------------------------------------------------------------
+MAX_LINE_CHARS = 800              # beyond this LINGO raised Error 3 "Overlength line"
+MAX_INLINE_DATA_CHARS = 1 << 20   # 1 MB; 1.3 MB of inline DATA raised Error 62
+DOMAIN_FUNC_RE = re.compile(r"@(?:BND|BIN|GIN|FREE|SEMIC)\b", re.I)
+IDENT_RE = re.compile(r"[A-Za-z_]\w*")
+
+
+def lint_model(model_text):
+    """Static advisory checks on the .lng source; returns warning strings that
+    are merged into the runner JSON `warnings` field (exit code unaffected)."""
+    warns = []
+    if not model_text:
+        return warns
+    lines = model_text.splitlines()
+
+    # 1) overlength lines -> Error 3 "Overlength line" (the line is truncated)
+    long_lines = [(i, len(l)) for i, l in enumerate(lines, 1)
+                  if len(l) > MAX_LINE_CHARS]
+    if long_lines:
+        sample = "; ".join("line %d: %d chars" % (i, n) for i, n in long_lines[:3])
+        warns.append("%d line(s) exceed ~%d chars (%s): LINGO Error 3 'Overlength "
+                     "line' risk - chunk matrix data to lines of <=500 chars"
+                     % (len(long_lines), MAX_LINE_CHARS, sample))
+
+    # 2) huge inline DATA -> Error 62 "Ran out of workspace in model generation"
+    data_chars = sum(len(m.group(0)) for m in
+                     re.finditer(r"DATA:.*?ENDDATA", model_text, re.I | re.S))
+    if data_chars > MAX_INLINE_DATA_CHARS:
+        warns.append("inline DATA block(s) total %.1f MB (>1 MB): LINGO Error 62 "
+                     "'Ran out of workspace in model generation' risk - move data "
+                     "to a file (@TEXT/@POINTER) or shrink it"
+                     % (data_chars / 1048576.0))
+
+    # 3) set attributes used in the model body without any variable-domain
+    #    declaration (@BND/@BIN/@GIN/@FREE/@SEMIC). Fires only when the model
+    #    declares domains somewhere: mixed semantics is where a forgotten
+    #    bound is a real bug (observed: a 0-1 slack left without its upper
+    #    bound while other variables were bounded).
+    sets_m = re.search(r"SETS:.*?ENDSETS", model_text, re.I | re.S)
+    attrs = set()
+    if sets_m:
+        for line in sets_m.group(0).splitlines():
+            m2 = (re.match(r"\s*[A-Za-z_]\w*\s*/.*?/\s*:\s*(.+?)\s*;", line)
+                  or re.match(r"\s*[A-Za-z_]\w*\s*\([^)]*\)\s*:\s*(.+?)\s*;", line))
+            if m2:
+                attrs.update(a.strip() for a in m2.group(1).split(",") if a.strip())
+    if attrs:
+        declared = set()
+        for m2 in DOMAIN_FUNC_RE.finditer(model_text):
+            j = m2.end()
+            while j < len(model_text) and model_text[j].isspace():
+                j += 1
+            if j >= len(model_text) or model_text[j] != "(":
+                continue
+            depth, k = 1, j + 1
+            start = k
+            while k < len(model_text) and depth:
+                if model_text[k] == "(":
+                    depth += 1
+                elif model_text[k] == ")":
+                    depth -= 1
+                k += 1
+            declared.update(IDENT_RE.findall(model_text[start:k - 1]))
+        data_assigned = set()
+        data_m = re.search(r"DATA:.*?ENDDATA", model_text, re.I | re.S)
+        if data_m:
+            for line in data_m.group(0).splitlines():
+                m2 = re.match(r"\s*([A-Za-z_]\w*)\s*=", line)
+                if m2:
+                    data_assigned.add(m2.group(1))
+        usage = re.sub(r"SETS:.*?ENDSETS|DATA:.*?ENDDATA", " ", model_text,
+                       flags=re.I | re.S)
+        usage = re.sub(r"!.*?;", " ", usage, flags=re.S)   # comments
+        usage = re.sub(r"\[[^\]]*\]", " ", usage)          # row labels
+        usage = re.sub(r"@[A-Za-z_]\w*", " ", usage)       # @functions
+        used = set(IDENT_RE.findall(usage))
+        missing = sorted(a for a in attrs
+                         if a in used and a not in declared
+                         and a not in data_assigned)
+        if missing and declared:
+            names = ", ".join(missing[:5]) + ("..." if len(missing) > 5 else "")
+            warns.append("%d set attribute(s) used but never given a variable "
+                         "domain (%s): they default to non-negative only; for "
+                         "0-1/bounded semantics add explicit @BND/@BIN"
+                         % (len(missing), names))
+    return warns
+
+
+# --------------------------------------------------------------------------
 # Main solve routine
 # --------------------------------------------------------------------------
 def solve(model_path, out_dir=None, inputs=None, vars_query=None,
@@ -395,6 +551,11 @@ def solve(model_path, out_dir=None, inputs=None, vars_query=None,
     log_path = os.path.join(out_dir, "lingo_run.log")
 
     warnings = []
+    try:
+        model_text = open(model_path, "r", encoding="mbcs", errors="replace").read()
+    except OSError:
+        model_text = ""
+    warnings += lint_model(model_text)
     dll = bind(load_dll())
     penv = dll.LScreateEnvLng()
     if not penv:
@@ -449,10 +610,6 @@ def solve(model_path, out_dir=None, inputs=None, vars_query=None,
 
     elapsed = time.perf_counter() - t_start
     log_text = open(log_path, "r", encoding="mbcs", errors="replace").read()
-    try:
-        model_text = open(model_path, "r", encoding="mbcs", errors="replace").read()
-    except OSError:
-        model_text = ""
     # solve direction: needed to build a clean convergence trace
     minimize = not re.search(r"\bMAX\s*=", model_text, re.I)
 
@@ -460,21 +617,25 @@ def solve(model_path, out_dir=None, inputs=None, vars_query=None,
     errors = parse_errors(log_text)
     if errors:
         warnings += ["Error %s: %s" % (c, t) for c, t in errors]
-    status_code = detect_status(log_text)
+    report = find_report_tail(log_text)
+    status_code, status_warnings = detect_status(log_text, region=report)
     if status_code is None:
         status_code = -1
+    warnings += status_warnings
     variables, constraints = parse_report_tables(log_text)
     obj_coeff_ranges, rhs_ranges = parse_sensitivity(log_text)
 
-    # objective / stats parsed from the log report section
-    m_obj = re.search(r"Objective value:\s*(" + NUM_RE + r")", log_text, re.I)
-    m_bnd = re.search(r"Objective bound:\s*(" + NUM_RE + r")", log_text, re.I)
-    m_it = re.search(r"Total solver iterations:\s*(\d+)", log_text, re.I)
-    m_ext = re.search(r"Extended solver steps:\s*(\d+)", log_text, re.I)
-    m_inf = re.search(r"Infeasibilities:\s*(" + NUM_RE + r")", log_text, re.I)
+    # objective / stats parsed from the log report section only (the model
+    # echo above it must not leak numbers into the summary)
+    scope = report if report is not None else ""
+    m_obj = re.search(r"Objective value:\s*(" + NUM_RE + r")", scope, re.I)
+    m_bnd = re.search(r"Objective bound:\s*(" + NUM_RE + r")", scope, re.I)
+    m_it = re.search(r"Total solver iterations:\s*(\d+)", scope, re.I)
+    m_ext = re.search(r"Extended solver steps:\s*(\d+)", scope, re.I)
+    m_inf = re.search(r"Infeasibilities:\s*(" + NUM_RE + r")", scope, re.I)
 
     def stat(pattern, cast):
-        m = re.search(pattern, log_text, re.I)
+        m = re.search(pattern, scope, re.I)
         return cast(m.group(1)) if m else None
 
     model_class = stat(r"Model Class:\s*(\S+)", str)
