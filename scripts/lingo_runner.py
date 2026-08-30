@@ -13,7 +13,8 @@ Outputs (written to the run directory, utf-8-sig, English snake_case headers):
 
 CLI:
   python lingo_runner.py MODEL.lng [--out DIR] [--inputs pointers.json]
-         [--vars X,Y,Z] [--no-trace] [--no-sensitivity]
+         [--vars X,Y,Z] [--no-trace] [--no-sensitivity] [--global]
+         [--timeout 1800]
 
 pointers.json format (slot numbers must be consecutive 1..N in the model):
   {"inputs":  {"1": "MON TUE WED", "2": [8, 10, 9], "3": 0.03},
@@ -831,8 +832,8 @@ def main(argv=None):
         return _worker_main([a for a in argv if a != WORKER_FLAG])
 
     ap = argparse.ArgumentParser(add_help=False)
-    ap.add_argument("--timeout", type=float, default=300.0,
-                    help="hard kill for the solve in seconds (default 300)")
+    ap.add_argument("--timeout", type=float, default=1800.0,
+                    help="hard kill for the solve in seconds (default 1800)")
     _known, rest = ap.parse_known_args(argv)
 
     child = [sys.executable, os.path.abspath(__file__), WORKER_FLAG] + rest

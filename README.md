@@ -81,7 +81,7 @@ cp -r lingo-optimize ~/.agents/skills/
 ```bash
 python lingo-optimize/scripts/lingo_runner.py model.lng \
     [--out DIR] [--inputs ptr.json] [--vars X,Y] \
-    [--no-trace] [--no-sensitivity] [--global] [--timeout 300]
+    [--no-trace] [--no-sensitivity] [--global] [--timeout 1800]
 ```
 
 - 默认输出目录 `./lingo_runs/run_<时间戳>/`（相对当前工作目录）；
@@ -89,12 +89,14 @@ python lingo-optimize/scripts/lingo_runner.py model.lng \
   warnings、各 CSV 路径；
 - 退出码：0 = 求得最优（全局/局部）；1 = 不可行/无界/未定/未求解（NOT
   SOLVED，含语法错、Error 62 等）；2 = 调用或系统错误；
-- 求解在带 300s 硬超时的子进程中运行，模型有问题时杀进程报错，不会挂死终端。
+- 求解在带 1800 秒（30 分钟）硬超时的子进程中运行，模型有问题时杀进程报错，
+  不会挂死终端。
 
 ### 方式三：作为 Python 库
 
 ```python
 from lingo_runner import solve
+
 result = solve("model.lng", out_dir="run1")   # 返回 dict，字段同 stdout JSON
 ```
 
@@ -106,10 +108,11 @@ scripts/lingo_runner.py   # ctypes -> Lingd64_18.dll，CSV 导出，子进程超
 scripts/self_test.py      # 离线回归自测（fixtures 取自真实运行日志，免 LINGO）
 references/
   lingo_syntax.md         # 语法规范 + 14 条高频错误（防幻觉核心，写模型前必读）
-  functions.md            # 127 个内置 @ 函数及官方描述
+  functions.md            # 113 个内置 @ 函数及官方描述
   data_bridge.md          # Python <-> LINGO 数据通道：内插 DATA / @POINTER / @TEXT-@FILE
   model_library.md        # 本机 120+ 官方样例模型按题型索引
 assets/templates/         # 实测模板：运输 LP、0-1 MIP、@POINTER 数据桥接
+CHANGELOG.md              # 版本与变更历史（版本信息唯一来源）
 ```
 
 ## 工作原理
@@ -133,7 +136,7 @@ assets/templates/         # 实测模板：运输 LP、0-1 MIP、@POINTER 数据
 - **无状态产物**：所有输出落在运行目录（CSV + log），由调用方（Agent 或人）
   自行读取，技能本身不依赖任何会话历史。
 
-## 已知限制与版本适配
+## 已知限制与 LINGO 版本适配
 
 - 灵敏度分析仅适用于纯 LP；MIP/NLP 模型会优雅跳过（LINGO error 121 属预期，
   非故障）。
@@ -147,11 +150,7 @@ assets/templates/         # 实测模板：运输 LP、0-1 MIP、@POINTER 数据
   截断）；内联 DATA >约 1 MB 触发 Error 62（模型未进入求解，状态 NOT
   SOLVED）——大数据走 `@TEXT`/`@POINTER` 外置。
 
-## 版本
+---
 
-- **v1.1（2026-08-29）**：① 状态判定重写——`status_text` 只锚定日志报告段
-  （"No feasible solution found." / 非零 `Infeasibilities` → 不可行；无报告段 →
-  NOT SOLVED），不再对整份日志做关键词扫描；② 新增求解前 advisory lint
-  （超长行 / 内联 DATA 体量 / 变量域缺失，进 stdout JSON `warnings`）；
-  ③ 语法文档补三条实测规则（清单 11→14 条）+ 新增 `scripts/self_test.py`。
-  改动依据与踩坑细节见项目实测报告；v1.0 原件见对应工作区备份目录。
+版本与变更历史见 [CHANGELOG.md](CHANGELOG.md)（本技能版本信息的唯一来源，
+`SKILL.md` 与 `README.md` 不承载版本记录）。

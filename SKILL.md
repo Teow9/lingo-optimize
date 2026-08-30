@@ -12,7 +12,7 @@ description: >-
   pandas/matplotlib 分析的 CSV 结果（summary/variables/constraints/trace/sensitivity）。
 ---
 
-# lingo-optimize：Python 规范化调用 LINGO 求解优化问题
+# lingo-optimize：用 Python 规范化调用 LINGO 求解优化问题
 
 **原理**：`scripts/lingo_runner.py` 用 ctypes 调用 `%LINGO64_18_HOME%\Lingd64_18.dll`
 （进程内、零编译、已实测），把模型交给 LINGO 求解引擎，解析求解报告并输出
@@ -23,21 +23,21 @@ CSV 五件套。你要做的是：**写对模型 → 调 runner → 读结果**�
 1. **写模型前先读** `references/lingo_syntax.md`（尤其"高频错误自查清单"）。
    你对 LINGO 语法的先验记忆大概率是错的——以该文件为准。
 2. **只写纯文本 `.lng` 模型**（`MODEL:` 开头、`END` 结尾）。绝不产出
-   `.lg4`（二进制 GUI 格式）、绝不混入旧式 LINDO 语法（`SUBJECT TO`、`Row)`）。
+   `.lg4`（二进制 GUI 格式），绝不混入旧式 LINDO 语法（`SUBJECT TO`、`Row)`）。
 3. **脚本中 `TAKE` 的路径**：绝对路径 + 正斜杠 + **不加引号**（引号会作为
    文件名的一部分导致 Error 7；含空格不加引号反而没问题）。
-4. **`@POINTER(n)` 槽位必须从 1 连续编号**且与注册顺序一致；数值输出槽要
+4. **`@POINTER(n)` 槽位必须从 1 连续编号**，且与注册顺序一致；数值输出槽要
    预先声明长度，长度错了 LINGO 会静默少写（见 `references/data_bridge.md`）。
 5. **输出指针初始化为哨兵值**并由 runner 校验——区分"模型没跑"与"跑出 0 解"。
 6. **不要在模型里用未知脚本命令**（如 `SET RANGS`——不存在的参数会让 LINGO
-   进入 `Parameter?` 交互提示并永久挂起）。runner 已内置 300s 硬超时兜底。
+   进入 `Parameter?` 交互提示并永久挂起）。runner 已内置 1800 秒（30 分钟）硬超时兜底。
 7. **一次求解一个 LINGO 环境**（runner 已封装：每次运行独立 env）。
 8. 中文只能出现在注释里；集合成员名/变量名只用 ASCII。
-9. **模型体量硬约束（实测）**：DATA/约束单行 ≤约 800 字符（超长触发 Error 3
-   且数据被截断）；内联 DATA 总量 ≤1MB（1.3 MB 实测触发 Error 62
-   "Ran out of workspace"，模型根本未求解）。矩阵数据按 ≤500 字符分块折行，
+9. **模型体量硬约束（实测）**：DATA/约束单行 ≤ 约 800 字符（超长触发 Error 3
+   且数据被截断）；内联 DATA 总量 ≤ 1 MB（1.3 MB 实测触发 Error 62
+   "Ran out of workspace"，模型根本未求解）。矩阵数据按 ≤ 500 字符分块折行，
    更大数据走 `@TEXT`/`@POINTER`；0-1/有界语义显式 `@BND` 双界写全。
-   详见 `references/lingo_syntax.md` 第 4.1 节与第 7 节第 12-14 条。
+   详见 `references/lingo_syntax.md` 第 4.1 节与第 7 节第 12–14 条。
 
 ## 1. 标准工作流
 
@@ -45,17 +45,17 @@ CSV 五件套。你要做的是：**写对模型 → 调 runner → 读结果**�
 
 - 语法规则与 14 条高频错误：`references/lingo_syntax.md`（**必读**）。
 - 三个可直接改写的模板（均已实测求出正确最优解）：
-  - `assets/templates/transport_sets.lng` —— SETS/DATA 运输问题（LP 范式）
-  - `assets/templates/integer_program.lng` —— 0-1 混合整数（@BIN 指示变量）
-  - `assets/templates/pointer_bridge.lng` —— @POINTER 数据桥接（数组进出）
+  - `assets/templates/transport_sets.lng` —— SETS/DATA 运输问题（LP 范式）；
+  - `assets/templates/integer_program.lng` —— 0-1 混合整数（`@BIN` 指示变量）；
+  - `assets/templates/pointer_bridge.lng` —— `@POINTER` 数据桥接（数组进出）。
 - 想找官方同题型样例对照：`references/model_library.md`（按题型索引本机
   120+ 教材模型与功能演示）。
-- 需要 @ 函数确切签名：`references/functions.md`（127 个精选函数带官方描述）。
+- 需要 @ 函数确切签名：`references/functions.md`（113 个精选函数带官方描述）。
 
 ### 第 2 步：写模型 `.lng`
 
 - 把用户的优化问题翻译成 LINGO 模型：目标（`MIN =`/`MAX =`）+ 约束 +
-  变量域（`@GIN/@BIN/@FREE/@BND`）+ 行标签 `[Name]`。
+  变量域（`@GIN`/`@BIN`/`@FREE`/`@BND`）+ 行标签 `[Name]`。
 - 数据通道三选一（详见 `references/data_bridge.md`）：
   - **内插 DATA 段**（默认）：Python 生成模型时把数据写死在 `DATA:` 里；
   - **`@POINTER` 桥接**：数组数据/要精确回传解时用；
@@ -67,15 +67,15 @@ CSV 五件套。你要做的是：**写对模型 → 调 runner → 读结果**�
 ```bash
 python "<skill目录>/scripts/lingo_runner.py" model.lng \
        [--out 输出目录] [--inputs ptr.json] [--vars X,Y] \
-       [--no-trace] [--no-sensitivity] [--timeout 300]
+       [--no-trace] [--no-sensitivity] [--global] [--timeout 1800]
 ```
 
 - 默认输出目录：`./lingo_runs/run_<时间戳>/`（相对当前工作目录）。
-- runner 在子进程中求解（300s 硬超时，超时杀进程报错，不会挂死会话）。
+- runner 在子进程中求解（默认 1800 秒硬超时，超时杀进程报错，不会挂死会话）。
 - **stdout 输出一个 JSON**：`status_text`、`objective`、`gap`、`iterations`、
   `pointer_outputs`、`warnings`、`files`（各 CSV 路径）。先读这个 JSON。
-- 退出码：0=求得最优（全局/局部）；1=不可行/无界/未定/**未求解（NOT
-  SOLVED，含语法错、Error 62 等）**；2=调用或系统错误。
+- 退出码：0 = 求得最优（全局/局部）；1 = 不可行/无界/未定/**未求解（NOT
+  SOLVED，含语法错、Error 62 等）**；2 = 调用或系统错误。
 
 ### 第 4 步：汇报结果
 
@@ -84,7 +84,7 @@ python "<skill目录>/scripts/lingo_runner.py" model.lng \
 （`constraints.csv` 的 slack=0 说明该约束是紧的）、迭代与耗时。
 若有 `warnings`（如 Error 121 表示整数模型无灵敏度），如实转述。
 
-**状态口径（v1.1）**：`status_text` 只由日志**报告段**判定（"No feasible
+**状态口径**：`status_text` 只由日志**报告段**判定（"No feasible
 solution found." / 非零 `Infeasibilities` → 不可行；"Global/Local optimal
 solution found." → 最优；无报告段 → NOT SOLVED）。日志中途的
 `may be nonoptimal/infeasible` 警告与模型回显**不代表**最终状态；
@@ -94,13 +94,17 @@ solution found." → 最优；无报告段 → NOT SOLVED）。日志中途的
 ### 第 5 步：绘图分析（Python 读 CSV）
 
 ```python
-import pandas as pd, matplotlib.pyplot as plt
+import pandas as pd
+import matplotlib.pyplot as plt
+
 run = "lingo_runs/run_20260829_160000"
 v = pd.read_csv(f"{run}/variables.csv")
 t = pd.read_csv(f"{run}/trace.csv")
 # 收敛曲线（MIP 下界逼近过程 / LP 单点）
 plt.plot(t["t_sec"], t["best_bound"] if t["best_bound"].notna().any() else t["incumbent"])
-plt.xlabel("time (s)"); plt.ylabel("objective"); plt.show()
+plt.xlabel("time (s)")
+plt.ylabel("objective")
+plt.show()
 ```
 
 ## 2. CSV 产出速查（utf-8-sig，可直接 `pd.read_csv`）
@@ -114,7 +118,7 @@ plt.xlabel("time (s)"); plt.ylabel("objective"); plt.show()
 | `sensitivity.csv` | section(objective_coefficient/rhs), name, current_value, allowable_increase, allowable_decrease | LP 灵敏度（RANGES 报告）；INFINITY 输出为 inf；整数/非线性模型自动跳过 |
 | `lingo_run.log` | — | 原始求解报告与模型回显，排错用 |
 
-## 3. `@POINTER` 桥接速记（细节见 data_bridge.md）
+## 3. `@POINTER` 桥接速记（细节见 `references/data_bridge.md`）
 
 - 模型：输入 `NEEDS = @POINTER(1);`，输出 `@POINTER(3) = START;`
   `@POINTER(4) = @STATUS();`——槽号从 1 连续。
@@ -133,7 +137,7 @@ plt.xlabel("time (s)"); plt.ylabel("objective"); plt.show()
 |---|---|
 | Error 7 无法打开文件 | TAKE 路径加了引号 → 去掉引号 |
 | Error 11 语法错误 | 按语法文档自查；注意 `!` 注释内出现 `;` 会提前终止注释 |
-| Error 3 "Overlength line" | 单行超约 800 字符（DATA 段最常见）→ 数据按 ≤500 字符分块折行（见语法文档 §4.1） |
+| Error 3 "Overlength line" | 单行超约 800 字符（DATA 段最常见）→ 数据按 ≤ 500 字符分块折行（见语法文档 §4.1） |
 | Error 62 "Ran out of workspace in model generation" | 内联 DATA 总量过大（MB 级）→ 数据外置 @TEXT/@POINTER 或缩减；此错终态为 NOT SOLVED，读 lingo_run.log 确认 |
 | Error 37 名字已占用 | 行标签 `[CAP]` 与属性重名 → 换标签名 |
 | Error 121 | 整数/非线性模型不支持灵敏度（正常现象，非故障） |
@@ -146,20 +150,11 @@ plt.xlabel("time (s)"); plt.ylabel("objective"); plt.show()
 
 - `LINGO64_18_HOME` 环境变量指向 LINGO 18 安装目录（`E:\Tools\LINGO64_18`），
   且该目录在 PATH 中；许可为 Site 全功能（线性/整数/非线性/全局/随机/锥）。
-- Python ≥3.8，仅标准库（不需要 numpy）。
+- Python ≥ 3.8，仅标准库（不需要 numpy）。
 - runner 与 LINGO DLL 的绑定签名依据 `Programming Samples\Lingd18.h`，
   修改 LINGO 版本后如遇加载失败，核对该头文件的 9 个 `LS*Lng` 函数签名。
 
-## 6. 版本记录
+---
 
-- **v1.1（2026-08-29）**：
-  1. `status_text` 判定重写——只锚定日志报告段，以 "No feasible solution
-     found." / 非零 `Infeasibilities` 值为准（修复原全文关键词扫描可被模型
-     回显与中途警告污染的设计缺陷；不可行报告并无 "INFEASIBLE" 字样）；
-  2. 新增求解前 advisory lint（单行 >800 字符 / 内联 DATA >1MB / 变量域缺失，
-     结果进 stdout JSON `warnings`，不阻断求解）；
-  3. 语法文档补充三条实测规则（Error 3 行长、Error 62 数据量、防御性 @BND，
-     清单 11→14 条），新增 `scripts/self_test.py` 离线回归（fixtures 取自
-     真实运行日志，`python scripts/self_test.py` 免 LINGO 可跑）。
-  依据：2023 CUMCM B 题项目 9 次实跑的踩坑复核（见工作区 `项目报告.md`）；
-  v1.0 原件备份于该工作区 `skill_backup_lingo-optimize_v1.0/`。
+> 版本与变更历史见 [CHANGELOG.md](CHANGELOG.md)——本技能版本信息的唯一来源，
+> `SKILL.md` 与 `README.md` 不承载版本记录。

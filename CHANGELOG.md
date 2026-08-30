@@ -2,6 +2,25 @@
 
 记录 lingo-optimize 技能包的版本变更。版本号取 `主.次` 两位（技能包规模小，暂不启用补丁位）；
 所有变更均以真实项目实测为依据，不做无证据的规则堆砌。
+版本记录以本文件为唯一来源：`SKILL.md` 与 `README.md` 不再承载版本信息。
+
+## [v1.2] - 2026-08-30
+
+### Changed
+
+- **`--timeout` 默认值 300 → 1800 秒**（`scripts/lingo_runner.py`）：子进程硬
+  超时兜底放宽到 30 分钟，为大体量、慢收敛的模型留足求解时间。超时行为不变：
+  杀掉子进程、stdout 输出 error JSON（含 `timeout_sec`）并以退出码 2 结束；
+  仍可按模型难度用 `--timeout` 显式覆盖。
+- **文档规范化重写**（`SKILL.md` / `README.md`）：移除两文件中的版本记录小节，
+  版本信息统一收敛至本文件；同步修正文档间不一致——`SKILL.md` CLI 示例补上
+  `--global`、内置函数计数统一为 `references/functions.md` 实际条目数（113）、
+  `references/lingo_syntax.md` 正文去除版本标签。
+
+### 兼容性
+
+- CLI 参数、stdout JSON 字段、CSV 五件套、退出码映射**全部不变**；默认超时
+  放宽对既有调用零影响。
 
 ## [v1.1] - 2026-08-29
 
@@ -55,5 +74,6 @@
   - `assets/templates/` —— 3 个实测可跑的模型模板（运输 LP、0-1 MIP、
     @POINTER 桥接）。
 
+[v1.2]: https://github.com/Teow9/lingo-optimize/releases/tag/v1.2
 [v1.1]: https://github.com/Teow9/lingo-optimize/releases/tag/v1.1
 [v1.0]: https://github.com/Teow9/lingo-optimize/releases/tag/v1.0
